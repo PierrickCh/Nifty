@@ -1,0 +1,3 @@
+./comparison/synthesis4metrics/**
+./comparison/models4metrics/**
+!./comparison/*.zip

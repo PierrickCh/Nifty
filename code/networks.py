@@ -8,12 +8,12 @@ import torch
 import torch.nn.functional as F
 import tqdm
 import torchvision
+from tqdm import tqdm
 
-
-def train_flow_net(img_clean, model, device='cuda', epochs=30000,load=True,save_name='flow_model'):
+def train_flow_net(img_clean, model, device='cuda', epochs=20000,load=True,show=False,save_name='results/models/flow_model.pth'):
     model = model.to(device)
     if load:
-        model.load_state_dict(torch.load('results/networks/%s.pth'%save_name, map_location=device))
+        model.load_state_dict(torch.load(save_name, map_location=device))
     model.train()
     img_clean = img_clean.to(device)
     mu,sigma=img_clean.mean(),img_clean.std()
@@ -21,7 +21,7 @@ def train_flow_net(img_clean, model, device='cuda', epochs=30000,load=True,save_
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MSELoss()
     bs=8
-    for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(epochs),disable=not show):
         t = torch.rand((bs,1,1,1), device=device)  
         gt=torchvision.transforms.RandomCrop(64)(img_clean.repeat(bs,1,1,1)) # patch size 64 for traininging
         noise = torch.randn(bs,*gt.shape[1:]).cuda()
@@ -36,9 +36,7 @@ def train_flow_net(img_clean, model, device='cuda', epochs=30000,load=True,save_
         loss.backward()
         optimizer.step()
 
-        if (epoch+1) % 10000 == 0:
-            torch.save(model.state_dict(), 'results/networks/%s.pth'%save_name)
-    torch.save(model.state_dict(), 'results/networks/%s.pth'%save_name)
+    torch.save(model.state_dict(), save_name)
 
 
 
@@ -51,10 +49,7 @@ def default(val, d):
         return val
     return d() if callable(d) else d
 
-def cast_tuple(t, length = 1):
-    if isinstance(t, tuple):
-        return t
-    return ((t,) * length)
+
 
 def divisible_by(numer, denom):
     return (numer % denom) == 0
@@ -62,34 +57,7 @@ def divisible_by(numer, denom):
 def identity(t, *args, **kwargs):
     return t
 
-def cycle(dl):
-    while True:
-        for data in dl:
-            yield data
 
-def has_int_squareroot(num):
-    return (math.sqrt(num) ** 2) == num
-
-def num_to_groups(num, divisor):
-    groups = num // divisor
-    remainder = num % divisor
-    arr = [divisor] * groups
-    if remainder > 0:
-        arr.append(remainder)
-    return arr
-
-def convert_image_to_fn(img_type, image):
-    if image.mode != img_type:
-        return image.convert(img_type)
-    return image
-
-# normalization functions
-
-def normalize_to_neg_one_to_one(img):
-    return img * 2 - 1
-
-def unnormalize_to_zero_to_one(t):
-    return (t + 1) * 0.5
 
 # small helper modules
 
@@ -129,22 +97,6 @@ class SinusoidalPosEmb(Module):
         emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
         return emb
 
-class RandomOrLearnedSinusoidalPosEmb(Module):
-    """ following @crowsonkb 's lead with random (learned optional) sinusoidal pos emb """
-    """ https://github.com/crowsonkb/v-diffusion-jax/blob/master/diffusion/models/danbooru_128.py#L8 """
-
-    def __init__(self, dim, is_random = False):
-        super().__init__()
-        assert divisible_by(dim, 2)
-        half_dim = dim // 2
-        self.weights = nn.Parameter(torch.randn(half_dim), requires_grad = not is_random)
-
-    def forward(self, x):
-        x = rearrange(x, 'b -> b 1')
-        freqs = x * rearrange(self.weights, 'd -> 1 d') * 2 * math.pi
-        fouriered = torch.cat((freqs.sin(), freqs.cos()), dim = -1)
-        fouriered = torch.cat((x, fouriered), dim = -1)
-        return fouriered
 
 # building block modules
 
@@ -194,7 +146,7 @@ class ResnetBlock(Module):
         return h + self.res_conv(x)
 
 
-class Unet(Module):
+class UNet(Module):
     def __init__(
         self,
         dim,

@@ -20,9 +20,9 @@ else :
 
 def imsave(s,x):    
     out = (x.squeeze(0).permute(1, 2, 0).cpu().numpy()*.5+.5).clip(0, 1)
-    plt.imsave('./results/%s.png'%s, out)
+    plt.imsave(s, out)
     
-def Tensor_display(img1, img2=None):
+def Tensor_display(img1, img2=None,s=None):
     """
     Display one or two images (torch tensors) side by side using subplots, even if their sizes mismatch.
     img1, img2: torch tensors with shape (1, C, H, W) or (C, H, W)
@@ -39,6 +39,8 @@ def Tensor_display(img1, img2=None):
         plt.figure(figsize=(10, 10))
         plt.imshow(img_np, interpolation="bicubic")
         plt.axis('off')
+        if s is not None:
+            plt.title(s)
         plt.show()
     else:
         img1_np = to_numpy(img1)
@@ -52,6 +54,8 @@ def Tensor_display(img1, img2=None):
         axes[0].axis('off')
         axes[1].imshow(img2_np, interpolation="bicubic")
         axes[1].axis('off')
+        if s is not None:
+            fig.suptitle(s)
         plt.tight_layout()
         plt.show()
 
@@ -63,16 +67,13 @@ def Tensor_load(file_name) :
     img = torch.tensor(img_np0, device=device, requires_grad = False).permute(2, 0, 1).unsqueeze(0)
     if img.size(1) == 4 :
         img = img[:,:3,:,:]
-    return img
+    return (img*2-1).to(torch.float32)
 
 def Patch_extraction(img, patchsize, stride) :
     P = torch.nn.Unfold(kernel_size=patchsize, dilation=1, padding=0, stride=stride)(img) # Tensor with dimension 1 x 3*Patchsize^2 x Heigh*Width/stride^2
-    return P
+    return P.to(torch.float32)
 
 def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4) : 
-    # r = 0.8 in Kwatra
-    
-
     # Gaussian weight for patch center
 
     w=torch.exp(-torch.linspace(-patchsize//2,patchsize//2,steps=patchsize).pow(2)/2/(patchsize*spotsize)**2).to(device)
@@ -82,7 +83,7 @@ def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4) :
     w=w.unsqueeze(0).unsqueeze(-1)
 
     synth = nn.Fold((W,H), patchsize, dilation=1, padding=0, stride=stride)(P_synth*w)
-    count = nn.Fold((W,H), patchsize, dilation=1, padding=0, stride=stride)(P_synth*0+w)
+    count = nn.Fold((W,H), patchsize, dilation=1, padding=0, stride=stride)(P_synth*0+w) # normalization to sum to 1
 
 
     count= (count*(count!=0)+1.*(count==0))
@@ -91,8 +92,11 @@ def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4) :
 
 
 
-def make_times(
-    n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3,p=.3): # different time discretizations
+def make_times(n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3,p=.3): 
+    '''
+    different time discretizations, 'quad' has smaller timesteps near t=0
+    '''
+   
     
     if schedule == "quad":
         times=torch.linspace(t0**.5,1,n_timestep+1)**2
@@ -119,32 +123,35 @@ def make_times(
     return times
 
 
-def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None,proj=None,I=None) :
+def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
     N = P_exmpl.size(2)
     
     ## random subsampling
     Ns = np.min([N_subsampling,N])
-    if I is None:
-        I = torch.randperm(N)
-        I = I[0:Ns]
+    I = torch.randperm(N)
+    I = I[0:Ns]
     
+    # Distance matrix between synthesis patches, and sampled exemplar partches
     X = P_exmpl[:,:,I] 
     X = X.squeeze(0) # d x Ns
     X2 = (X**2).sum(0).unsqueeze(0) # 1 x Ns
     Y = P_synth.squeeze(0) # d x N
     Y2 = (Y**2).sum(0).unsqueeze(0) # squared norm : 1 x N
     D = Y2.transpose(1,0) - 2 * torch.matmul(Y.transpose(1,0),X) + X2 #N Ns
-
+    
 
 
     J,ind = torch.topk(-D,k=k,dim=1)
     topk = X[:,ind].unsqueeze(0) 
     I=I.cuda()
     if mem is None:
+        # first iteration, output top k, and store their indices
         top=topk
         mem=torch.take(I,ind)
         dists=-J
     else:
+
+        # subsequent iterations, fetch previous topk from indices in memory, and compute new topk among previous topk + new candidates  
 
         X_mem=P_exmpl[:,:,mem]
         X=X_mem[0].permute(2,0,1)
@@ -153,9 +160,12 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None,proj=None,I=None) 
         Y2 = (Y**2).sum(1)
         D_mem=(Y2+X2-2*(X*Y).sum(1)).T
 
-        Dcat=torch.cat((D_mem,-J),dim=1)
+        Dcat=torch.cat((D_mem,-J),dim=1) # distances to previous topk + new candidates
         indcat=torch.cat((mem,torch.take(I,ind)),dim=1)
         
+        # the following lines remove duplicates (by setting D to infinity at the indices of duplicates), if indices in memory are found again in new candidates
+
+        ###
         sorted_indcat,sorted_indcat_ind=torch.sort(indcat,dim=1)
 
         del_mask = torch.zeros_like(indcat, dtype=torch.bool)
@@ -164,7 +174,7 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None,proj=None,I=None) 
         _,inv_sorted_indcat_ind=torch.sort(sorted_indcat_ind,dim=1)
         del_mask=torch.take_along_dim(del_mask,inv_sorted_indcat_ind,dim=1)
         Dcat[del_mask]=torch.inf
-
+        ###
 
         Dcat,dists_ind=torch.sort(Dcat,dim=-1)
         Dcat=Dcat[:,:k]
@@ -181,12 +191,11 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None,proj=None,I=None) 
     return top, dists, mem
 
 
-def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise=.5,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5):
+def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise=.5,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True):
     if seed is not None:
         torch.manual_seed(seed)
 
     H,W=size
-    h,w=0,0
     b,c,_,_=img.shape
 
     if im2 is not None and not blend:
@@ -288,10 +297,12 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
 
             P_synth += P_flow*(times[it+1]-t) # ODE steps and aggregation of flows
             synth = Patch_Average(P_synth, patchsize, stride,  synth.shape[-2], synth.shape[-1], D[:,0],spotsize=spotsize) 
-        if show: 
-            Tensor_display(synth*sigma+mu,img_resized*sigma+mu)
-        imsave('gt_s%d'%s,img_resized*sigma+mu)
-        imsave('synth_s%d'%s,synth*sigma+mu)
+        
+        if save:
+            imsave('./results/gt_s%d.png'%s,img_resized*sigma+mu)
+            imsave('./results/synth_s%d.png'%s,synth*sigma+mu)
+    if show: 
+        Tensor_display(synth*sigma+mu,img_resized*sigma+mu)
         
 
 
