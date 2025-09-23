@@ -302,7 +302,7 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             imsave('./results/gt_s%d.png'%s,img_resized*sigma+mu)
             imsave('./results/synth_s%d.png'%s,synth*sigma+mu)
     if show: 
-        Tensor_display(synth*sigma+mu,img_resized*sigma+mu)
+        Tensor_display(img_resized*sigma+mu,synth*sigma+mu)
         
 
 
