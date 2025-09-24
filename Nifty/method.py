@@ -4,11 +4,10 @@ import math
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms as transforms
+import torchvision.transforms as T
 import matplotlib.pyplot as plt
 import ot
-from scipy.optimize import root_scalar
-from skimage.transform import resize
+from PIL import Image
 from torch import nn
 
 
@@ -18,56 +17,70 @@ if torch.cuda.is_available():
 else :
     device = torch.device('cpu')
 
+
+
+def Tensor_load(file_name):
+    img = Image.open(file_name).convert('RGB')  # Ensure 3 channels (no alpha)
+    img = torch.from_numpy(np.array(img)).float() / 255.0  # Normalize to [0, 1]
+    img = img.permute(2, 0, 1).unsqueeze(0).to(device)  # (1, C, H, W)
+    return img * 2 - 1  # Scale to [-1, 1]
+
+
+def Tensor_display(img1, img2=None, title=None, pad_value=1.0):
+    def to_np(img):
+        if img.dim() == 4:
+            img = img.squeeze(0)
+        img = (img.clamp(-1, 1) + 1) / 2  # [-1,1] -> [0,1]
+        return img.permute(1, 2, 0).cpu().numpy()
+
+    def center_pad(img, target_h, target_w, pad_val):
+        _, _, h, w = img.shape
+        pad_h = target_h - h
+        pad_w = target_w - w
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left
+        # pad format: (left, right, top, bottom)
+        padding = (pad_left, pad_right, pad_top, pad_bottom)
+        return F.pad(img, padding, mode='constant', value=pad_val)
+
+    images = [img1]
+    if img2 is not None:
+        images.append(img2)
+
+    # Find max height and width
+    heights = [img.shape[-2] for img in images]
+    widths = [img.shape[-1] for img in images]
+    max_h, max_w = max(heights), max(widths)
+
+    # Center pad images to max size
+    images = [center_pad(img, max_h, max_w, pad_value) for img in images]
+
+    n = len(images)
+    fig, axs = plt.subplots(1, n, figsize=(6 * n, 6))
+    if n == 1:
+        axs = [axs]
+
+    for ax, img in zip(axs, images):
+        np_img = to_np(img)
+        ax.imshow(np_img, interpolation='none')
+        ax.axis('off')
+        ax.set_xlim([0, max_w])
+        ax.set_ylim([max_h, 0])
+
+    if title:
+        fig.suptitle(title)
+    plt.tight_layout()
+    plt.show()
+
+
+
 def imsave(s,x):    
     out = (x.squeeze(0).permute(1, 2, 0).cpu().numpy()*.5+.5).clip(0, 1)
     plt.imsave(s, out)
-    
-def Tensor_display(img1, img2=None,s=None):
-    """
-    Display one or two images (torch tensors) side by side using subplots, even if their sizes mismatch.
-    img1, img2: torch tensors with shape (1, C, H, W) or (C, H, W)
-    """
-    def to_numpy(img):
-        if img.dim() == 4:
-            img_np = img.squeeze(0).permute(1, 2, 0).detach().cpu().numpy() * .5 + .5
-        else:
-            img_np = img.permute(1, 2, 0).detach().cpu().numpy() * .5 + .5
-        return img_np.clip(0, 1)
 
-    if img2 is None:
-        img_np = to_numpy(img1)
-        plt.figure(figsize=(10, 10))
-        plt.imshow(img_np, interpolation="bicubic")
-        plt.axis('off')
-        if s is not None:
-            plt.title(s)
-        plt.show()
-    else:
-        img1_np = to_numpy(img1)
-        img2_np = to_numpy(img2)
-        h1, w1 = img1_np.shape[:2]
-        h2, w2 = img2_np.shape[:2]
-        if h1 != h2:
-            img2_np = resize(img2_np, (h1, int(w2 * h1 / h2)), preserve_range=True, anti_aliasing=True)
-        fig, axes = plt.subplots(1, 2, figsize=(15, 10))
-        axes[0].imshow(img1_np, interpolation="bicubic")
-        axes[0].axis('off')
-        axes[1].imshow(img2_np, interpolation="bicubic")
-        axes[1].axis('off')
-        if s is not None:
-            fig.suptitle(s)
-        plt.tight_layout()
-        plt.show()
 
-def Tensor_load(file_name) : 
-    img_np0 = plt.imread(file_name)
-    if img_np0.max()>1 : 
-        img_np0 = img_np0/img_np0.max()
-
-    img = torch.tensor(img_np0, device=device, requires_grad = False).permute(2, 0, 1).unsqueeze(0)
-    if img.size(1) == 4 :
-        img = img[:,:3,:,:]
-    return (img*2-1).to(torch.float32)
 
 def Patch_extraction(img, patchsize, stride) :
     P = torch.nn.Unfold(kernel_size=patchsize, dilation=1, padding=0, stride=stride)(img) # Tensor with dimension 1 x 3*Patchsize^2 x Heigh*Width/stride^2
@@ -96,13 +109,11 @@ def make_times(n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_en
     '''
     different time discretizations, 'quad' has smaller timesteps near t=0
     '''
-   
-    
-    if schedule == "quad":
-        times=torch.linspace(t0**.5,1,n_timestep+1)**2
-
-    elif schedule == "linear":
+    if  schedule == "linear":
         times = torch.linspace(t0,1,n_timestep+1) 
+        
+    elif schedule == "quad":
+        times=torch.linspace(t0**.5,1,n_timestep+1)**2
 
     elif schedule == "cosine":
         times = (
@@ -111,15 +122,6 @@ def make_times(n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_en
 
         times = torch.sin(times).pow(2)
         times = times / times[-1]
-    elif schedule == "poly":
-        p=.2
-        f=lambda x: 4*(1-p)*x**3 + 6*(p-1)*x**2 + (3-2*p)*x
-        func = lambda x: f(x) - t0
-        sol = root_scalar(func, bracket=[0,2], method='brentq')
-        inv_t0 = sol.root 
-        times = torch.linspace(inv_t0,1,n_timestep+1) 
-        times=f(times)
-
     return times
 
 
@@ -213,6 +215,8 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
         img=(img-mu)/sigma 
 
     for s in range(octaves):
+
+        # Resize annd extract reference patches for the image and the optional second image
         mem=None
         mem2=None
         if s==(octaves-1):
@@ -233,13 +237,13 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
 
         N_subsampling=int(rs*P_exmpl.shape[-1])
 
-        if s==0:
+        if s==0: # Initialize at coarsest scale
             if noise is None:
                 synth=torch.randn(b,c,int(H*2**-(octaves-1)),int(W*2**-(octaves-1))).cuda()
             else:
                 synth=noise.cuda()
             t0=0
-        else:
+        else: # Upsample from previous scale and renoise
             synth=F.interpolate(synth,size=(int(H*2**-(octaves-1-s)),int(W*2**-(octaves-1-s))),mode='bicubic')
             t0=renoise
             synth=synth*t0+torch.randn(synth.shape).cuda()*(1-t0)
@@ -262,17 +266,9 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             for _ in range(warmup):
                 P_topk, D ,mem = Patch_topk(P_exmpl*t0, P_synth, N_subsampling,k=k,mem=mem)
 
-            if show and warmup>0:
-                plt.plot(l)
-                plt.show()
-      
-
-  
-        for it in range(T):
+        for it in range(T): # ODE steps
             t=times[it]
-
             P_synth = Patch_extraction(synth, patchsize, stride)
-            
             ## NN SEARCH
             
             if not memory:
@@ -281,9 +277,7 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
 
 
             P_topk, D ,mem = Patch_topk(P_exmpl*t, P_synth, N_subsampling,k=k,mem=mem)
-            P_topk=P_topk/t# renorm
-
-
+            P_topk=P_topk/t # renorm
             weight=nn.Softmax(dim=1)(-D/2/(1-t)**2) # flow weights
             P_flow=((P_topk-P_synth.unsqueeze(-1))*weight.unsqueeze(0).unsqueeze(0)).sum(-1)/(1-t) # \hat{\omega}} in the paper
 
