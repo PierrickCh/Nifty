@@ -38,6 +38,7 @@
 ### Interpolation example:
 ![](images/pixel_blending.png)
 
+![](images/spatial_blending.png)
 
 
 

@@ -193,7 +193,7 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
     return top, dists, mem
 
 
-def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise=.5,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True):
+def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise=.5,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None):
     if seed is not None:
         torch.manual_seed(seed)
 
@@ -286,7 +286,12 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
                 P_topk2=P_topk2/t
                 weight2=nn.Softmax(dim=1)(-D/2/(1-t)**2)
                 P_flow2=((P_topk2-P_synth.unsqueeze(-1))*weight2.unsqueeze(0).unsqueeze(0)).sum(-1)/(1-t)
-                P_flow=blend_alpha*P_flow+(1-blend_alpha)*P_flow2
+                if blend_map is not None:
+                    blend_map_resized=F.interpolate(blend_map.repeat(1,c,1,1),size=(synth.shape[-2],synth.shape[-1]),mode='bicubic',align_corners=True).clamp(0,1).to(device)
+                    P_alpha=Patch_extraction(blend_map_resized,patchsize=patchsize,stride=stride)
+                    P_flow= P_alpha*P_flow+(1-P_alpha)*P_flow2
+                else:
+                    P_flow=blend_alpha*P_flow+(1-blend_alpha)*P_flow2
 
 
             P_synth += P_flow*(times[it+1]-t) # ODE steps and aggregation of flows
