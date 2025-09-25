@@ -1,25 +1,34 @@
-# NIFTY: A NON-LOCAL IMAGE FLOW MATCHING FOR TEXTURE SYNTHESIS
+# Official pytorch implementation of the paper: "NIFTY: A non-local image flow matching for texture synthesis"
 [Pierrick Chatillon](https://scholar.google.com/citations?user=8MgK55oAAAAJ&hl=en) | [Julien Rabin](https://sites.google.com/site/rabinjulien/) | [David Tschumperlé](https://tschumperle.users.greyc.fr/)
 
 
 [Arxiv]() [Paper]() [HAL]()
 
-## Official pytorch implementation of the paper: "NIFTY: A non-local image flow matching for texture synthesis"
 
 ### Visualization: Nearest Neighbor for Each Pixel of a Synthesized Image
-| Reference | Synthesized |
-|-----------|-------------|
-| ![](images/fig_ref.png) | ![](images/fig_synth.png) |
 
-| Ground Truth Warp | Predicted Warp |
-|-------------------|----------------|
-| ![](images/fig_gt_warp.png) | ![](images/fig_warp.png) |
-
-### Highlight of Novel Regions
-
-<p align="right">
-  <img src="images/fig_novelty.png" width="400"/>
-</p>
+<table>
+  <tr>
+    <td><strong>Reference</strong></td>
+    <td><strong>Synthesized</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/fig_ref.png" width="400"/></td>
+    <td><img src="images/fig_synth.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td><strong>Ground Positions</strong></td>
+    <td><strong>Position of Nearest Neighbor</strong></td>
+  </tr>
+  <tr>
+    <td><img src="images/fig_gt_warp.png" width="400"/></td>
+    <td><img src="images/fig_warp.png" width="400"/></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td><img src="images/fig_novelty.png" width="400"/></td>
+  </tr>
+</table>
 
 
 ### Interpolation example:
