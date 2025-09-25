@@ -62,7 +62,7 @@ conda activate nifty
 All experiments with hyperparameters are replicable in the notebook experiments.ipynb.
 The notebook saves the results in ./results/
 
-For reproductibility, seeded inference are provided in reproductible_inference.ipynb, allowing to reproduce figures and tables in the article.
+For reproducibility, seeded inference are provided in reproducible_inference.ipynb, allowing to reproduce figures and tables in the article.
 The results of these seeded runs are prvovided in .zip files under ./comparison/ , you can either run the notebook or unzip the files.
 
 ## Acknowledgments
