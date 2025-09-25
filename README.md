@@ -13,7 +13,7 @@
     <td><strong>Synthesized</strong></td>
   </tr>
   <tr>
-    <td><img src="images/fig_ref.png" width="400"/></td>
+    <td><img src="images/fig_ref.png" width="200"/></td>
     <td><img src="images/fig_synth.png" width="400"/></td>
   </tr>
   <tr>
@@ -21,7 +21,7 @@
     <td><strong>Position of Nearest Neighbor</strong></td>
   </tr>
   <tr>
-    <td><img src="images/fig_gt_warp.png" width="400"/></td>
+    <td><img src="images/fig_gt_warp.png" width="200"/></td>
     <td><img src="images/fig_warp.png" width="400"/></td>
   </tr>
   <tr>
