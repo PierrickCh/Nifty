@@ -13,16 +13,16 @@
     <td><strong>Synthesized</strong></td>
   </tr>
   <tr>
-    <td><img src="images/fig_ref.png" width="200"/></td>
-    <td><img src="images/fig_synth.png" width="400"/></td>
+    <td><img src="images/fig_ref.png" width="250"/></td>
+    <td><img src="images/fig_synth.png" width="500"/></td>
   </tr>
   <tr>
     <td><strong>Ground Positions</strong></td>
     <td><strong>Position of Nearest Neighbor</strong></td>
   </tr>
   <tr>
-    <td><img src="images/fig_gt_warp.png" width="200"/></td>
-    <td><img src="images/fig_warp.png" width="400"/></td>
+    <td><img src="images/fig_gt_warp.png" width="250"/></td>
+    <td><img src="images/fig_warp.png" width="500"/></td>
   </tr>
   <tr>
     <td></td>
@@ -30,7 +30,7 @@
   </tr>
   <tr>
     <td></td>
-    <td><img src="images/fig_novelty.png" width="400"/></td>
+    <td><img src="images/fig_novelty.png" width="500"/></td>
   </tr>
 </table>
 
