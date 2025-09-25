@@ -1,17 +1,15 @@
 name: nifty
 channels:
+  - pytorch
+  - nvidia
   - conda-forge
 dependencies:
   - pytorch==2.5.1
-  - torchvision==0.20.1
-  - setuptools
+  - torchvision==0.20.1$
   - pillow
   - tqdm
   - numpy
-  - scipy
   - matplotlib
-  - imageio
-  - opencv
   - einops
   - ipykernel
   - pot
