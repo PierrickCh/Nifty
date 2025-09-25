@@ -4,7 +4,7 @@ import math
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms as T
+import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import ot
 from PIL import Image
