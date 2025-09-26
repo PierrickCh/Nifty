@@ -1,7 +1,5 @@
 __pycache__/
 metrics/
-Nifty/metrics.py
-Nifty/inception.py
 comparison/synthesis4metrics/
 comparison/models4metrics/
 !./comparison/*.zip
