@@ -67,9 +67,9 @@ For reproducibility, all expermients are seeded in experiments.ipynb.\
 Additionally, seeded inference are provided in reproducible_inference.ipynb, allowing to reproduce figures and tables in the article.\
 The results of these seeded runs are provided in .zip files under ./comparison/ , you can either run the notebook or unzip the files.\
 After recomputing or unzipping, you can compute the metrics from Table 1 by running:
-'''
+```
 python Nifty/metrics.py
-'''
+```
 
 ## Acknowledgments
 This  work  was  partly  funded  by  the  Normandy  Region  through  theIArtist excellence label project.
