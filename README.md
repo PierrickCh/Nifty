@@ -2,7 +2,7 @@
 [Pierrick Chatillon](https://scholar.google.com/citations?user=8MgK55oAAAAJ&hl=en) | [Julien Rabin](https://sites.google.com/site/rabinjulien/) | [David Tschumperlé](https://tschumperle.users.greyc.fr/)
 
 
-[Arxiv](http://arxiv.org/abs/2509.22318) [Paper]() [HAL]()
+[Arxiv](http://arxiv.org/abs/2509.22318) [Paper]() [HAL](https://hal.science/hal-05287967)
 
 
 ### Visualization: Nearest Neighbor for Each Pixel of a Synthesized Image
