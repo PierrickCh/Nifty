@@ -24,7 +24,7 @@ def train_flow_net(img_clean, model, device='cuda', epochs=20000,load=True,show=
     for epoch in tqdm(range(epochs),disable=not show):
         t = torch.rand((bs,1,1,1), device=device)  
         gt=torchvision.transforms.RandomCrop(64)(img_clean.repeat(bs,1,1,1)) # patch size 64 for traininging
-        noise = torch.randn(bs,*gt.shape[1:]).cuda()
+        noise = torch.randn(bs,*gt.shape[1:]).to(device)
         img_noisy = gt*t + noise*(1-t)
         true_flow = gt - noise
         

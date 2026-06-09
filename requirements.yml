@@ -4,8 +4,8 @@ channels:
   - nvidia
   - conda-forge
 dependencies:
+  - torchvision==0.20.1 # Find the correct version of torchvision according to your computer's CUDA version (retrieved with nvidia-smi on Windows) from : https://pytorch.org/get-started/locally/
   - pytorch==2.5.1
-  - torchvision==0.20.1$
   - pillow
   - tqdm
   - numpy
@@ -13,3 +13,4 @@ dependencies:
   - einops
   - ipykernel
   - pot
+  - gradio

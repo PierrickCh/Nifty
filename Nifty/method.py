@@ -11,11 +11,14 @@ from PIL import Image
 from torch import nn
 
 
-if torch.cuda.is_available():
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
-    device = torch.device('cuda:0')
-else :
-    device = torch.device('cpu')
+def manually_select_device(try_gpu=True):
+    if torch.cuda.is_available() and try_gpu:
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
+        return torch.device('cuda:0')
+    else:
+        return torch.device('cpu')
+
+device = manually_select_device()
 
 
 
@@ -145,7 +148,7 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
 
     J,ind = torch.topk(-D,k=k,dim=1)
     topk = X[:,ind].unsqueeze(0) 
-    I=I.cuda()
+    I=I.to(device)
     if mem is None:
         # first iteration, output top k, and store their indices
         top=topk
@@ -239,14 +242,14 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
 
         if s==0: # Initialize at coarsest scale
             if noise is None:
-                synth=torch.randn(b,c,int(H*2**-(octaves-1)),int(W*2**-(octaves-1))).cuda()
+                synth=torch.randn(b,c,int(H*2**-(octaves-1)),int(W*2**-(octaves-1))).to(device)
             else:
-                synth=noise.cuda()
+                synth=noise.to(device)
             t0=0
         else: # Upsample from previous scale and renoise
             synth=F.interpolate(synth,size=(int(H*2**-(octaves-1-s)),int(W*2**-(octaves-1-s))),mode='bicubic')
             t0=renoise
-            synth=synth*t0+torch.randn(synth.shape).cuda()*(1-t0)
+            synth=synth*t0+torch.randn(synth.shape).to(device)*(1-t0)
         
         if t0!=0:
             times=make_times(T,t0=t0,schedule='linear')
