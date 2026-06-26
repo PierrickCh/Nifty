@@ -107,7 +107,6 @@ def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4) :
     return synth
 
 
-
 def make_times(n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3,p=.3): 
     '''
     different time discretizations, 'quad' has smaller timesteps near t=0
@@ -195,8 +194,7 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
         
     return top, dists, mem
 
-
-def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise=.5,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None):
+def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise_time=.9,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None):
     if seed is not None:
         torch.manual_seed(seed)
 
@@ -246,13 +244,14 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             else:
                 synth=noise.to(device)
             t0=0
-        else: # Upsample from previous scale and renoise
+        else: # Upsample from previous scale and renoise_time
             synth=F.interpolate(synth,size=(int(H*2**-(octaves-1-s)),int(W*2**-(octaves-1-s))),mode='bicubic')
-            t0=renoise
+            
+            t0= renoise_time
             synth=synth*t0+torch.randn(synth.shape).to(device)*(1-t0)
         
         if t0!=0:
-            times=make_times(T,t0=t0,schedule='linear')
+            times=make_times(int( (1- renoise_time) * T) +1 ,t0=t0,schedule='linear')
         else:
             times=make_times(T+1,t0=0,schedule='linear')[1:]
             P_synth = Patch_extraction(synth, patchsize, stride)
@@ -269,7 +268,8 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             for _ in range(warmup):
                 P_topk, D ,mem = Patch_topk(P_exmpl*t0, P_synth, N_subsampling,k=k,mem=mem)
 
-        for it in range(T): # ODE steps
+
+        for it in range(times.shape[0]-1): # ODE steps
             t=times[it]
             P_synth = Patch_extraction(synth, patchsize, stride)
             ## NN SEARCH

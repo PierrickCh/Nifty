@@ -23,40 +23,51 @@ import warnings; warnings.filterwarnings('ignore')
 PYTORCH_CUDA_ALLOC_CONF=True 
 
 # Functions
-def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=4,width=256,height=256,octaves=4,renoise=.5,warmup=0,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None, manual_noise_seed:int=0):
+def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=4,width=256,height=256,octaves=4,renoise=.9,warmup=0,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None, manual_noise_seed:int=0):
     global force_stop_loop
     force_stop_loop = False
     torch.manual_seed(manual_noise_seed)
     img_1 = Tensor_load(im1)
     img_2 = Tensor_load(im2) if im2 is not None else None
     size = (height, width)
-
-    synth= Nifty(img_1,img_2,rs,T,k,patchsize,stride,size,octaves,renoise,warmup,False,memory,seed,None if noise == 0 else noise,spotsize,blend,blend_alpha,save, torch.tensor([[1,0]]).unsqueeze(0).unsqueeze(0).float().to(_nifty_method.device) if blend_map else None)
-
-    if force_stop_loop:
-        return gr.update(value=None)
-
-    if save:
-        out_path = save_img_to_path(f"./results/demo/synth_{os.path.basename(im1)}_{round(time.time())}.png", synth)
-
-    img_synth = get_synthesized_image(synth)
-
-    if display_debug_mode:
-        # Calculate Novelty Map
-        P_exmpl_1 = Patch_extraction(img_1, patchsize=patchsize, stride=1)
-        P_exmpl_2 = Patch_extraction(img_2, patchsize=patchsize, stride=1) if img_2 is not None else None
-        P_synth = Patch_extraction(synth, patchsize=patchsize, stride=1)
-
-        novel_areas = get_nn_distance_map_and_novel_areas(synth, P_exmpl_1, P_exmpl_2, P_synth, patchsize, height, width)
+    try : 
+        synth= Nifty(img_1,img_2,rs,T,k,patchsize,stride,size,octaves,renoise,warmup,False,memory,seed,None if noise == 0 else noise,spotsize,blend,blend_alpha,save, torch.tensor([[1,0]]).unsqueeze(0).unsqueeze(0).float().to(_nifty_method.device) if blend_map else None)
 
         if force_stop_loop:
             return gr.update(value=None)
 
-        return (img_synth, novel_areas)
+        if save:
+            out_path = save_img_to_path(f"./results/demo/synth_{os.path.basename(im1)}_{round(time.time())}.png", synth)
 
-    return (img_synth, img_synth)
+        img_synth = get_synthesized_image(synth)
 
+        if display_debug_mode:
+            # Calculate Novelty Map
+            P_exmpl_1 = Patch_extraction(img_1, patchsize=patchsize, stride=1)
+            P_exmpl_2 = Patch_extraction(img_2, patchsize=patchsize, stride=1) if img_2 is not None else None
+            P_synth = Patch_extraction(synth, patchsize=patchsize, stride=1)
 
+            novel_areas = get_nn_distance_map_and_novel_areas(synth, P_exmpl_1, P_exmpl_2, P_synth, patchsize, height, width)
+
+            if force_stop_loop:
+                return gr.update(value=None)
+
+            return (img_synth, novel_areas)
+
+        return (img_synth, img_synth)
+    except RuntimeError as E :
+        
+        if "k out of range" in str(E):
+            msg = "Reduce K Neighbors"
+        elif "Input and output sizes should be greater than 0" in str(E):
+            msg = "Reduce number of octaves"
+        elif "its components must be at least one" in str(E):
+            msg = "Reduce number of octaves or reduce patch size"
+        else : 
+            msg = "Something went wrong, load an example to reset the parameters or try changing them."
+        
+        print(E)
+        raise gr.Error(msg)
 def clear_cuda_cache():
     if "cuda" in str(_nifty_method.device):
         torch.cuda.empty_cache()
@@ -147,6 +158,16 @@ def update_output_display_mode(debug_mode_enabled: bool):
     display_debug_mode = debug_mode_enabled
 
 
+
+def update_compression_maximums_and_values(in_img,in_width,in_height):
+    if in_img is not None : 
+        img = Image.open(in_img)
+        w,h = img.size
+        return gr.update(value=min(w,1024), interactive=True), gr.update(value=min(h,1024), interactive=True)
+    else :
+        return gr.update(interactive=False), gr.update(interactive=False)
+
+
 # Initialize processing unit selection
 selected_processing_unit_type = "GPU" if "cuda" in str(_nifty_method.device) else "CPU"
 
@@ -157,7 +178,6 @@ force_stop_loop = False
 def force_stop_loop_f():
     global force_stop_loop
     force_stop_loop = True
-
 
 # Interface
 from Demos.Utilities.theme import *
@@ -176,7 +196,7 @@ def demo_nifty():
                     elem_id="processing_unit_radio_group"
                 )
             with gr.Column(scale=1, elem_classes="filled_flex_display"):
-                in_debug_mode = gr.Checkbox(label="Debug Mode", value=False, info="Enable debug mode to display novelty areas on the output, which can help to understand and analyze the synthesis process, but is much slower and more memory consuming")
+                in_debug_mode = gr.Checkbox(label="Advanced visualization mode", value=False, info="Enable to compare synthesis to the original image at the same resolution : displays novelty areas on the output, which can help to understand and analyze the synthesis process, but is much slower and more memory consuming")
 
         gr.HTML(HTML_SEPARATOR)
 
@@ -187,19 +207,19 @@ def demo_nifty():
                 with gr.Row(equal_height=True, scale=1):
                     with gr.Column(scale=1, elem_classes="filled_flex_display"):
                         in_compressed_height = gr.Slider(
-                            minimum=64,
-                            maximum=2048,
-                            value=512,
-                            step=64,
+                            minimum=32,
+                            maximum=1024,
+                            value=256,
+                            step=32,
                             label="Height",
                             info="Input image height in pixels once resized"
                         )
 
                         in_compressed_width = gr.Slider(
-                            minimum=64,
-                            maximum=2048,
-                            value=512,
-                            step=64,
+                            minimum=32,
+                            maximum=1024,
+                            value=256,
+                            step=32,
                             label="Width",
                             info="Input image width in pixels once resized"
                         )
@@ -207,7 +227,7 @@ def demo_nifty():
                     with gr.Column(scale=1):
                         in_img1 = gr.Image(
                             label="Input Image",
-                            value="results/red_peppers.jpg",
+                            value="results/demo/red_peppers_128.png",
                             type="filepath",
                             width=256,
                             height=256,
@@ -228,7 +248,7 @@ def demo_nifty():
                         in_height = gr.Slider(
                             minimum=64,
                             maximum=2048,
-                            value=512,
+                            value=256,
                             step=64,
                             label="Height",
                             info="Output image height in pixels"
@@ -236,7 +256,7 @@ def demo_nifty():
                         in_width = gr.Slider(
                             minimum=64,
                             maximum=2048,
-                            value=512,
+                            value=256,
                             step=64,
                             label="Width",
                             info="Output image width in pixels"
@@ -265,17 +285,17 @@ def demo_nifty():
                 info="Number of (linear) distretization steps between 0 and 1 to solve the flow ODE"
                 )
             in_k = gr.Slider(
-                minimum=0.,
+                minimum=1.,
                 maximum=50.,
-                value=5.,
+                value=3.,
                 step=0.,
                 label="K Neighbors",
                 info="Number of top closest patch used to approximate the velocity field"
                 )
             in_octaves = gr.Slider(
-                minimum=0.,
-                maximum=20.,
-                value=4.,
+                minimum=1.,
+                maximum=10.,
+                value=3.,
                 step=1.,
                 label="Octaves",
                 info="Number of diadic scales used for the synthesis"
@@ -283,7 +303,7 @@ def demo_nifty():
             in_renoise = gr.Slider(
                 minimum=0.,
                 maximum=1.,
-                value=0.3,
+                value=0.9,
                 step=0.01,
                 label="Renoise",
                 info="Time used renoise the smooth upsampled image at each resolution"
@@ -299,7 +319,7 @@ def demo_nifty():
         # Optional/Advanced inputs
         with gr.Accordion("Advanced Inputs", open=False):
                     in_patch_size = gr.Slider(minimum=1, maximum=50, value=16, step=1, label="Patch Size")
-                    in_stride = gr.Slider(minimum=0, maximum=999999, value=4, step=1, label="Stride")
+                    in_stride = gr.Slider(minimum=1, maximum=16, value=4, step=1, label="Stride")
 
                     in_warmup = gr.Slider(minimum=0, maximum=100, value=0, step=1, label="Warmup", info="Number of initial steps during which the flow is not applied, which can help to stabilize the synthesis at the beginning")
                     in_memory = gr.Checkbox(value=False, label="Memory", info="Use the memory efficient version of Nifty, which does not store all the intermediate synthesized images during the flow integration, but only the current one")
@@ -313,13 +333,17 @@ def demo_nifty():
             inputs=[],
             outputs=[]
         )
-
         in_resize_button.click(
             fn=resize_input_image,
             inputs=[in_img1, in_compressed_width, in_compressed_height],
             outputs=in_img1
         )
-
+        in_img1.change(
+            fn=update_compression_maximums_and_values,
+            inputs = [in_img1, in_compressed_width, in_compressed_height],
+            outputs= [in_compressed_width, in_compressed_height],
+            show_progress=False
+        )
         # Bind the click event to the function
         process_nifty = submit_btn.click(
             fn = lambda : (gr.update(visible=False), gr.update(visible=True)),
@@ -333,6 +357,47 @@ def demo_nifty():
             outputs = [submit_btn, cancel_btn_nifty]
         )
 
+        
+        in_patch_size.change(
+            fn=lambda x,y : (gr.update(maximum=x, value=min(y,x))),
+            inputs=[in_patch_size, in_stride],
+            outputs=in_stride,
+            show_progress=False
+        )
+        
+        
+        
+        in_octaves.change(
+            fn = lambda o, ps, w,h : 
+                gr.update(
+                    maximum = min(w,h)/(2 ** (o-1)), 
+                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+            inputs= [in_octaves, in_patch_size, in_width, in_height],
+            outputs= in_patch_size,
+            show_progress=False
+        )
+        in_height.change(
+            fn = lambda o, ps, w,h : 
+                gr.update(
+                    maximum = min(w,h)/(2 ** (o-1)), 
+                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+            inputs= [in_octaves, in_patch_size, in_width, in_height],
+            outputs= in_patch_size,
+            show_progress=False
+        )
+        in_width.change(
+            fn = lambda o, ps, w,h : 
+                gr.update(
+                    maximum = min(w,h)/(2 ** (o-1)), 
+                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+            inputs= [in_octaves, in_patch_size, in_width, in_height],
+            outputs= in_patch_size,
+            show_progress=False
+        )
+        
+
+
+        
         in_processing_unit_choice.input(
             fn=update_processing_unit_selection,
             inputs=in_processing_unit_choice,
@@ -354,6 +419,7 @@ def demo_nifty():
         gr.Examples(
             label="Examples (Click to load the parameters) - Published in the paper and more",
             examples=[
+                    ["results/demo/red_peppers_128.png",None,1.,50,3,16,4,256,256,3,0.9,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
                     ["results/red_peppers.jpg",None,1.,100,10,16,4,512,256,4,0.5,0,True,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
                     ["comparison/eval_base/7.png","comparison/eval_base/8.png",1.,50,10,16,4,256,256,3,0.5,0,True,None,None,1/4,True,0.5,False,False,0], # Pixel-level blending
                     ["comparison/eval_base/7.png","comparison/eval_base/8.png",1.,50,10,16,4,256,256,3,0.5,0,True,None,None,1/4,False,0.5,False,False,0], # Distribution-level blending
