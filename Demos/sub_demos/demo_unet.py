@@ -145,8 +145,10 @@ def update_processing_unit_selection(choice:str):
 	global device_used
 	_nifty_method.device = manually_select_device(try_gpu=(choice == "GPU"))
 	device_used = _nifty_method.device
-	if 'flow_model' in globals() and flow_model is not None:
+	try : 
 		flow_model = flow_model.to(device_used)
+	except :
+		print("no flow model loaded")
  
 selected_processing_unit_type = "GPU" if "cuda" in str(_nifty_method.device) else "CPU"
 device_used = _nifty_method.device
