@@ -159,7 +159,6 @@ class UNet(Module):
         sinusoidal_pos_emb_theta = 10000,
         dropout = 0.):
         super().__init__()
-
         # determine dimensions
 
         self.channels = channels

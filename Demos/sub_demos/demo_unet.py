@@ -47,14 +47,17 @@ def train_unet(img_path, save_path, progress=gr.Progress(track_tqdm=True)):
 	return gr.update(interactive=True)
 
 def load_unet(file_obj):
+	
 	global flow_model
+
 	if file_obj is None:
 		return gr.update()
 		
 	flow_model = UNet(
 			dim=64,
-			dim_mults=(1, 2)).to(device_used)
-	
+			dim_mults=(1, 2)
+   ).to(device_used)
+
 	flow_model.load_state_dict(torch.load(file_obj.name, map_location=device_used))
 	flow_model.eval().to(device_used)
 	
@@ -67,33 +70,34 @@ def fresh_noise():
 
 # NN flow
 def flow_nn(image_path, T):
-    if "cuda" in str(_nifty_method.device):
-        torch.cuda.empty_cache()
-        print("cleared cache")
-    start = time.time()
-    torch.manual_seed(seed)
-    img = Tensor_load(image_path).clone().to(device_used)
-    mu, sigma = img.mean(), img.std()
-    if flow_model is None:
-        raise gr.Error("No Neural Network loaded")
-        
-    noise = fresh_noise()
-    with torch.no_grad():
-        x = noise*1.
-        times=torch.linspace(0, 1, steps=T+1).to(device_used)
-        for it in range(T):
-            t=times[it]
-            t = t.to(device_used).unsqueeze(0)
-            flow = flow_model(x,t.view(1))
-            x=x+flow*(times[it+1]-times[it])
+	if "cuda" in str(_nifty_method.device):
+		torch.cuda.empty_cache()
+		print("cleared cache")
+	start = time.time()
+	torch.manual_seed(seed)
+	img = Tensor_load(image_path).clone().to(device_used)
+	mu, sigma = img.mean(), img.std()
+	if flow_model is None:
+		raise gr.Error("No Neural Network loaded")
+	
+	flow_model.to(device_used)
+	noise = fresh_noise().to(device_used)
+	with torch.no_grad():
+		x = noise*1.
+		times=torch.linspace(0, 1, steps=T+1).to(device_used)
+		for it in range(T):
+			t=times[it].unsqueeze(0).to(device_used)
+			flow = flow_model(x,t.view(1)).to(device_used)
+			x=x+flow*(times[it+1]-times[it])
 
-            synth_nn_x= x*sigma+mu
-            yield get_synthesized_image(synth_nn_x[...,64:64+128,64:64+128])
+			synth_nn_x= x*sigma+mu
+			yield get_synthesized_image(synth_nn_x[...,64:64+128,64:64+128])
 
-    synth_nn = x*sigma+mu
-    synth_nn=synth_nn[...,64:64+128,64:64+128]
-    print(time.time()-start)
-    yield get_synthesized_image(synth_nn)
+	synth_nn = x*sigma+mu
+	synth_nn=synth_nn[...,64:64+128,64:64+128]
+	print(time.time()-start)
+	print(device_used)
+	yield get_synthesized_image(synth_nn)
 
 def flow_nifty(input_img_path, T, k, rs=1, octaves=1, renoise=0.5):
 	if "cuda" in str(_nifty_method.device):
@@ -106,7 +110,7 @@ def flow_nifty(input_img_path, T, k, rs=1, octaves=1, renoise=0.5):
 	im1 = Tensor_load(input_img_path).clone().to(device_used)
 	
 	noise = fresh_noise()
-	img= get_synthesized_image(Nifty(im1,rs=rs,T=T,k=k,patchsize=16,stride=4,octaves=octaves,size=(128,128),renoise=renoise,warmup=0,memory=False,noise=noise,show=False,spotsize=1/4,seed=seed,blend=0.,blend_alpha=0.5,blend_map=None))
+	img= get_synthesized_image(Nifty(im1,rs=rs,T=T,k=k,patchsize=16,stride=4,octaves=octaves,size=(128,128),renoise_time=renoise,warmup=0,memory=False,noise=noise,show=False,spotsize=1/4,seed=seed,blend=0.,blend_alpha=0.5,blend_map=None))
 	print(time.time()-start)
 	return img
 
@@ -141,6 +145,10 @@ def update_processing_unit_selection(choice:str):
 	global device_used
 	_nifty_method.device = manually_select_device(try_gpu=(choice == "GPU"))
 	device_used = _nifty_method.device
+	try : 
+		flow_model = flow_model.to(device_used)
+	except :
+		print("no flow model loaded")
  
 selected_processing_unit_type = "GPU" if "cuda" in str(_nifty_method.device) else "CPU"
 device_used = _nifty_method.device
@@ -156,7 +164,7 @@ else:
 # Interface
 from Demos.Utilities.theme import *
 def demo_unet():
-    
+	
 	with gr.Blocks(title="Nifty") as nifty_demo:
 		with gr.Row(equal_height=True):
 			in_processing_unit_choice = gr.Radio(
@@ -402,6 +410,6 @@ def demo_unet():
 		with open('Demos/sub_demos/doc/doc_unet.md','r') as f : 
 			gr.Markdown(f.read(),latex_delimiters=[{ "left": "$$", "right": "$$", "display": True },{"left": "$", "right": "$", "display": False},])
 if __name__ == "__main__":
-    with gr.Blocks() as demo:
-        demo_unet()
-    demo.queue().launch()
+	with gr.Blocks() as demo:
+		demo_unet()
+	demo.queue().launch()
