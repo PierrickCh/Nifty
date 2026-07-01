@@ -66,13 +66,15 @@ HTML_V_SEPARATOR = """
     </div>
 """
 
-HTML_LOGO_HEADER ="""
+HTML_LOGO_HEADER = """
     <header>
         <a href="https://www.greyc.fr/">
-            <img src="https://greycflix.greyc.fr/demo-portal/images/logo-GREYC-dark.svg" style="position: absolute; width: 12em;">
+            <img id="logo-light" src="https://www.greyc.fr/wp-content/uploads/2020/05/Greyc_violet.svg" style="position: absolute; width: 12em; display: block;">
+            <img id="logo-dark" src="https://greycflix.greyc.fr/demo-portal/images/logo-GREYC-dark.svg" style="position: absolute; width: 12em; display: none;">
         </a>
     </header>
 """
+
 
 HTML_HEADER = """
     <div style="text-align: center; padding: 0px;">
@@ -201,4 +203,13 @@ height: -webkit-fill-available;
 [data-testid="imageslider-image"] {
     max-block-size: -webkit-fill-available !important;
 }
+
+/* When Gradio is in Dark Mode, switch visibility to only display white logo wversiob */
+.dark #logo-light { display: none !important; }
+.dark #logo-dark { display: block !important; }
+
+/* Gradio in Light Mode, switch visibility to only display violet logo version*/
+:not(.dark) #logo-light { display: block !important; }
+:not(.dark) #logo-dark { display: none !important; }
+
 """
