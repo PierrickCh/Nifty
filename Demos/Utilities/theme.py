@@ -39,6 +39,10 @@ theme = gr.themes.Default(
     button_cancel_border_color_hover='hsl(0, 73%, 60%)',
     button_cancel_border_color_hover_dark='hsl(0, 73%, 60%)',
     loader_color="#78216b",
+    block_info_text_color="#797986",
+    block_info_text_color_dark="#bbbbc2",
+    body_text_color_subdued="#797986",
+    body_text_color_subdued_dark="#bbbbc2",
 )
 
 HTML_CUSTOM_HEAD = """
@@ -77,7 +81,7 @@ HTML_LOGO_HEADER = """
 
 
 HTML_HEADER = """
-    <div style="text-align: center; padding: 0px;">
+    <div style="text-align: center; padding: 0px;" class="custom_header_title">
         <h1 id="title">
             NIFTY
         </h1>
@@ -101,13 +105,13 @@ footer {visibility: hidden}
     font-size: 48px; 
     font-weight: 700; 
     margin: 0; 
-    color: #ffffff; 
+    color: var(--body-text-color);
     letter-spacing: -0.02em;
 }
 
 #subtitle{
     font-size: 20px; 
-    color: #86868b; 
+    color: var(--body-text-color-subdued);
     margin:0;
     font-weight: 400;
 }
@@ -211,5 +215,6 @@ height: -webkit-fill-available;
 /* Gradio in Light Mode, switch visibility to only display violet logo version*/
 :not(.dark) #logo-light { display: block !important; }
 :not(.dark) #logo-dark { display: none !important; }
+
 
 """

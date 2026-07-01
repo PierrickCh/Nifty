@@ -34,7 +34,7 @@ def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,s
         synth= Nifty(img_1,img_2,rs,T,k,patchsize,stride,size,octaves,renoise,warmup,False,memory,seed,None if noise == 0 else noise,spotsize,blend,blend_alpha,save, torch.tensor([[1,0]]).unsqueeze(0).unsqueeze(0).float().to(_nifty_method.device) if blend_map else None)
 
         if force_stop_loop:
-            return gr.update(value=None)
+            return gr.update(value=None), gr.update(value=None) # Update both to None
 
         if save:
             out_path = save_img_to_path(f"./results/demo/synth_{os.path.basename(im1)}_{round(time.time())}.png", synth)
@@ -50,11 +50,13 @@ def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,s
             novel_areas = get_nn_distance_map_and_novel_areas(synth, P_exmpl_1, P_exmpl_2, P_synth, patchsize, height, width)
 
             if force_stop_loop:
-                return gr.update(value=None)
+                return gr.update(value=None), gr.update(value=None) # Update both to None
 
-            return (img_synth, novel_areas)
+            # Return the slider with data and visible, hide the simple image
+            return gr.update(value=(img_synth, novel_areas), visible=True), gr.update(visible=False)
 
-        return (img_synth, img_synth)
+        # Return the simple image with data and visible, hide the slider
+        return gr.update(visible=False), gr.update(value=img_synth, visible=True)
     except RuntimeError as E :
         
         if "k out of range" in str(E):
@@ -238,11 +240,18 @@ def demo_nifty():
             with gr.Column(scale=1):
                 with gr.Row(equal_height=True, scale=1):
                     # The ImageSlider displays the synthesized image on the left (or not if not in debug mode) and the novel areas on the right
+                    # The Image displays only the synthesized image (used whe nthe advanced visualization isn't enabled, to avoid confusion with the floating slider doing nothing)
                     with gr.Column(scale=1):
-                        out_img = gr.ImageSlider(
-                            label="Output",
+                        out_img_slider = gr.ImageSlider(
+                            label="Output (Advanced)",
                             elem_id="output_image_slider",
-                            elem_classes="full_width"
+                            elem_classes="full_width",
+                            visible=False
+                        )
+                        out_img_simple = gr.Image(
+                            label="Output", 
+                            elem_classes="full_width", 
+                            visible=True
                         )
                     with gr.Column(scale=1, elem_classes="filled_flex_display"):
                         in_height = gr.Slider(
@@ -351,12 +360,13 @@ def demo_nifty():
         ).then(
             fn=Nifty_gradio_interface_complete,
             inputs=[in_img1, in_img2, in_rs, in_T, in_k, in_patch_size, in_stride, in_width, in_height, in_octaves, in_renoise, in_warmup, in_memory, in_seed, in_noise, in_spot_size, in_blend, in_blend_alpha, in_save, in_blend_map, in_seed],
-            outputs=[out_img],
+            outputs=[out_img_slider, out_img_simple],
         ).then(
             fn = lambda : (gr.update(visible=True), gr.update(visible=False)),
             outputs = [submit_btn, cancel_btn_nifty]
         )
 
+        
         
         in_patch_size.change(
             fn=lambda x,y : (gr.update(maximum=x, value=min(y,x))),
@@ -407,6 +417,7 @@ def demo_nifty():
             fn=update_output_display_mode,
             inputs=in_debug_mode,
         )
+        
         cancel_btn_nifty.click(
             fn=force_stop_loop_f,
             inputs=[],
