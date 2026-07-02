@@ -8,7 +8,6 @@ import time
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import gradio as gr
-import Nifty.method as _nifty_method
 from Nifty.method import *
 
 # For displaying the novelty map and other stuff
@@ -20,18 +19,42 @@ from PIL import Image
 
 import warnings; warnings.filterwarnings('ignore')
 
-PYTORCH_CUDA_ALLOC_CONF=True 
+
+temp_folder = "./results/demo/resized/"
+
+runs_on_server = False
+
+limitation_server = {
+    "resize_w_max" : 256,
+    "resize_h_max" : 256,
+    
+    "out_w_max" : 1024,
+    "out_h_max" : 1024,
+    
+    "k_max" : 5,
+}
+
+limitation_personal = {
+    "resize_w_max" : 1024,
+    "resize_h_max" : 1024,
+    
+    "out_w_max" : 2048,
+    "out_h_max" : 2048,
+    
+    "k_max" : 50,
+}
 
 # Functions
 def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=4,width=256,height=256,octaves=4,renoise=.9,warmup=0,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None, manual_noise_seed:int=0):
     global force_stop_loop
     force_stop_loop = False
     torch.manual_seed(manual_noise_seed)
-    img_1 = Tensor_load(im1)
-    img_2 = Tensor_load(im2) if im2 is not None else None
+    img_1 = Tensor_load(im1, device=device)
+    img_2 = Tensor_load(im2, device=device) if im2 is not None else None
     size = (height, width)
-    try : 
-        synth= Nifty(img_1,img_2,rs,T,k,patchsize,stride,size,octaves,renoise,warmup,False,memory,seed,None if noise == 0 else noise,spotsize,blend,blend_alpha,save, torch.tensor([[1,0]]).unsqueeze(0).unsqueeze(0).float().to(_nifty_method.device) if blend_map else None)
+    
+    try :
+        synth= Nifty(img_1,img_2,rs,T,k,patchsize,stride,size,octaves,renoise,warmup,False,memory,seed,None if noise == 0 else noise,spotsize,blend,blend_alpha,save, torch.tensor([[1,0]]).unsqueeze(0).unsqueeze(0).float().to(device) if blend_map else None, device=device)
 
         if force_stop_loop:
             return gr.update(value=None), gr.update(value=None) # Update both to None
@@ -70,8 +93,10 @@ def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,s
         
         print(E)
         raise gr.Error(msg)
+
+
 def clear_cuda_cache():
-    if "cuda" in str(_nifty_method.device):
+    if "cuda" in str(device):
         torch.cuda.empty_cache()
         gr.Info("Cache cleared")
 
@@ -143,14 +168,15 @@ def save_img_to_path(file_path, synthetized_image) -> str:
 
 
 def update_processing_unit_selection(choice: str):
-    _nifty_method.device = manually_select_device(try_gpu=(choice == "GPU"))
+    global device
+    device = manually_select_device(try_gpu=(choice == "GPU"))
 
 
 def resize_input_image(image_path: str, width: int, height: int) -> str:
     img = Image.open(image_path)
     img_resized = img.resize((width, height))
-    os.makedirs("./results/demo/resized/", exist_ok=True)
-    resized_image_path = f"./results/demo/resized/{os.path.basename(image_path)}_resized.png"
+    os.makedirs(temp_folder, exist_ok=True)
+    resized_image_path = f"{temp_folder}{os.path.basename(image_path)}_resized.png"
     img_resized.save(resized_image_path)
     return resized_image_path
 
@@ -171,8 +197,6 @@ def update_compression_maximums_and_values(in_img,in_width,in_height):
 
 
 # Initialize processing unit selection
-selected_processing_unit_type = "GPU" if "cuda" in str(_nifty_method.device) else "CPU"
-
 display_debug_mode = False
 force_stop_loop = False
 
@@ -184,11 +208,59 @@ def force_stop_loop_f():
 # Interface
 from Demos.Utilities.theme import *
 
+examples_cpu_server = [
+    #IMG1                                   IMG2                            ratio   steps   k   patch   stride  width   height  oct     renoise warmup  ...
+    ["results/demo/red_peppers_128.png",    None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .9,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/red_peppers.jpg",             None,                           1.,     100,    5,  16,     4,      512,    126,    4,      .8,     0,  True,None,None,1/4,False,0.5,False,False,0],
+    ["results/demo/7_128.png",              "results/demo/8_128.png",       1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  True,None,None,1/4,True,0.5,False,False,0], 
+    ["results/demo/7_128.png",              "results/demo/8_128.png",       1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  True,None,None,1/4,False,0.5,False,False,0],
+    ["results/demo/7_128.png",              "results/demo/8_128.png",       1.,     50,     3,  16,     4,      768,    126,    3,      .8,     0,  True,None,None,1/4,True,0.5,False,True,0], 
+    ["results/demo/1_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/2_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/3_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/4_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/5_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/6_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/7_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/8_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/9_128.png",              None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0], 
+    ["results/demo/10_128.png",             None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0],
+    ["results/demo/11_128.png",             None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0],
+    ["results/demo/12_128.png",             None,                           1.,     50,     3,  16,     4,      256,    256,    3,      .8,     0,  False,None,None,1/4,False,0.5,False,False,0],
+]
+
+examples = [
+    ["results/demo/red_peppers_128.png",    None,                           1.,     50,     3,  16,     4,      256,    256,    3,      0.9,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
+    ["results/red_peppers.jpg",             None,                           1.,     100,    10, 16,     4,      512,    256,    4,      0.5,    0,  True,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
+    ["comparison/eval_base/7.png",          "comparison/eval_base/8.png",   1.,     50,     10, 16,     4,      256,    256,    3,      0.5,    0,  True,None,None,1/4,True,0.5,False,False,0], # Pixel-level blending
+    ["comparison/eval_base/7.png",          "comparison/eval_base/8.png",   1.,     50,     10, 16,     4,      256,    256,    3,      0.5,    0,  True,None,None,1/4,False,0.5,False,False,0], # Distribution-level blending
+    ["comparison/eval_base/7.png",          "comparison/eval_base/8.png",   1.,     50,     10, 16,     4,      256*3,  256,    3,      0.5,    0,  True,None,None,1/4,True,0.5,False,True,0], # Spatial interpolation
+    ["comparison/eval_base/1.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #1
+    ["comparison/eval_base/2.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #2
+    ["comparison/eval_base/3.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #3
+    ["comparison/eval_base/4.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #4
+    ["comparison/eval_base/5.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #5
+    ["comparison/eval_base/6.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #6
+    ["comparison/eval_base/7.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #7
+    ["comparison/eval_base/8.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #8
+    ["comparison/eval_base/9.png",          None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #9
+    ["comparison/eval_base/10.png",         None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #10
+    ["comparison/eval_base/11.png",         None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #11
+    ["comparison/eval_base/12.png",         None,                           1.,     100,    10, 16,     4,      512,    512,    4,      0.5,    0,  False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #12
+]
+
 def demo_nifty():
+    global device
+    
+    chosen_limitation = limitation_server if runs_on_server else limitation_personal
+
+    selected_processing_unit_type = "GPU" if torch.cuda.is_available() and runs_on_server == False else "CPU"
+    device = manually_select_device(try_gpu=False)
+
     # CPU or GPU selection
     with gr.Blocks():
         with gr.Row(equal_height=True):
-            with gr.Column(scale=1):
+            with gr.Column(scale=1, visible= not runs_on_server):
                 in_processing_unit_choice = gr.Radio(
                     label="Mode",
                     choices=["GPU", "CPU"],
@@ -198,7 +270,7 @@ def demo_nifty():
                     elem_id="processing_unit_radio_group"
                 )
             with gr.Column(scale=1, elem_classes="filled_flex_display"):
-                in_debug_mode = gr.Checkbox(label="Advanced visualization mode", value=False, info="Enable to compare synthesis to the original image at the same resolution : displays novelty areas on the output, which can help to understand and analyze the synthesis process, but is much slower and more memory consuming")
+                in_debug_mode = gr.Checkbox(label="Advanced visualization mode", value=False, info="Enable to compare synthesis to the original image at the same resolution : displays novelty areas on the output, which can help to understand and analyze the synthesis process, but is **much slower** and more memory consuming")
 
         gr.HTML(HTML_SEPARATOR)
 
@@ -210,7 +282,7 @@ def demo_nifty():
                     with gr.Column(scale=1, elem_classes="filled_flex_display"):
                         in_compressed_height = gr.Slider(
                             minimum=32,
-                            maximum=1024,
+                            maximum=chosen_limitation["resize_h_max"],
                             value=256,
                             step=32,
                             label="Height",
@@ -219,7 +291,7 @@ def demo_nifty():
 
                         in_compressed_width = gr.Slider(
                             minimum=32,
-                            maximum=1024,
+                            maximum=chosen_limitation["resize_w_max"],
                             value=256,
                             step=32,
                             label="Width",
@@ -256,7 +328,7 @@ def demo_nifty():
                     with gr.Column(scale=1, elem_classes="filled_flex_display"):
                         in_height = gr.Slider(
                             minimum=64,
-                            maximum=2048,
+                            maximum=chosen_limitation["out_h_max"],
                             value=256,
                             step=64,
                             label="Height",
@@ -264,7 +336,7 @@ def demo_nifty():
                         )
                         in_width = gr.Slider(
                             minimum=64,
-                            maximum=2048,
+                            maximum=chosen_limitation["out_w_max"],
                             value=256,
                             step=64,
                             label="Width",
@@ -272,7 +344,7 @@ def demo_nifty():
                         )
                         submit_btn = gr.Button("Generate", variant="primary")
                         cancel_btn_nifty = gr.Button("Cancel", variant="stop", visible=False)
-                        in_clear_cache = gr.Button("Clear CUDA Cache", variant="stop", interactive=True)
+                        in_clear_cache = gr.Button("Clear CUDA Cache", variant="stop", interactive=True, visible= not runs_on_server)
 
         gr.HTML(HTML_SEPARATOR)
 
@@ -295,7 +367,7 @@ def demo_nifty():
                 )
             in_k = gr.Slider(
                 minimum=1.,
-                maximum=50.,
+                maximum=chosen_limitation["k_max"],
                 value=3.,
                 step=0.,
                 label="K Neighbors",
@@ -354,16 +426,31 @@ def demo_nifty():
             show_progress=False
         )
         # Bind the click event to the function
-        process_nifty = submit_btn.click(
-            fn = lambda : (gr.update(visible=False), gr.update(visible=True)),
-            outputs = [submit_btn, cancel_btn_nifty]
-        ).then(
+        
+        process_nifty_setup = submit_btn.click( # just the visual stuff
+            fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
+            outputs=[submit_btn, cancel_btn_nifty],
+            queue=False
+        )
+        process_nifty = process_nifty_setup.then( # generation that can get canceled
             fn=Nifty_gradio_interface_complete,
             inputs=[in_img1, in_img2, in_rs, in_T, in_k, in_patch_size, in_stride, in_width, in_height, in_octaves, in_renoise, in_warmup, in_memory, in_seed, in_noise, in_spot_size, in_blend, in_blend_alpha, in_save, in_blend_map, in_seed],
-            outputs=[out_img_slider, out_img_simple],
+            outputs=[out_img_slider, out_img_simple]
+        )
+        process_nifty.then(
+            fn=lambda: (gr.update(visible=True), gr.update(visible=False)),
+            outputs=[submit_btn, cancel_btn_nifty],
+            queue=False
+        )
+        
+        cancel_btn_nifty.click(
+            fn=force_stop_loop_f,
+            cancels= [process_nifty],
+            queue = False
         ).then(
             fn = lambda : (gr.update(visible=True), gr.update(visible=False)),
-            outputs = [submit_btn, cancel_btn_nifty]
+            outputs = [submit_btn, cancel_btn_nifty],
+            queue = False
         )
 
         
@@ -417,37 +504,12 @@ def demo_nifty():
             fn=update_output_display_mode,
             inputs=in_debug_mode,
         )
-        
-        cancel_btn_nifty.click(
-            fn=force_stop_loop_f,
-            inputs=[],
-            outputs=[],
-            cancels=[process_nifty]
-        ).then(
-            fn = lambda : (gr.update(visible=True), gr.update(visible=False)),
-            outputs = [submit_btn, cancel_btn_nifty]
-        )
+              
+        # Examples
+
         gr.Examples(
-            label="Examples (Click to load the parameters) - Published in the paper and more",
-            examples=[
-                    ["results/demo/red_peppers_128.png",None,1.,50,3,16,4,256,256,3,0.9,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
-                    ["results/red_peppers.jpg",None,1.,100,10,16,4,512,256,4,0.5,0,True,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use
-                    ["comparison/eval_base/7.png","comparison/eval_base/8.png",1.,50,10,16,4,256,256,3,0.5,0,True,None,None,1/4,True,0.5,False,False,0], # Pixel-level blending
-                    ["comparison/eval_base/7.png","comparison/eval_base/8.png",1.,50,10,16,4,256,256,3,0.5,0,True,None,None,1/4,False,0.5,False,False,0], # Distribution-level blending
-                    ["comparison/eval_base/7.png","comparison/eval_base/8.png",1.,50,10,16,4,256*3,256,3,0.5,0,True,None,None,1/4,True,0.5,False,True,0], # Spatial interpolation
-                    ["comparison/eval_base/1.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #1
-                    ["comparison/eval_base/2.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #2
-                    ["comparison/eval_base/3.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #3
-                    ["comparison/eval_base/4.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #4
-                    ["comparison/eval_base/5.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #5
-                    ["comparison/eval_base/6.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #6
-                    ["comparison/eval_base/7.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #7
-                    ["comparison/eval_base/8.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #8
-                    ["comparison/eval_base/9.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #9
-                    ["comparison/eval_base/10.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #10
-                    ["comparison/eval_base/11.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #11
-                    ["comparison/eval_base/12.png",None,1.,100,10,16,4,512,512,4,0.5,0,False,None,None,1/4,False,0.5,False,False,0], # Basic texture synthesis use, Paper #12
-            ],
+            label="Examples (Click to load the parameters) - Published in the paper and more" if runs_on_server == False else "Examples (Click to load the parameters) - Adapted from the paper and more",
+            examples= examples_cpu_server if runs_on_server else examples,
             inputs=[in_img1,in_img2,in_rs,in_T,in_k,in_patch_size,in_stride,in_width,in_height,in_octaves,in_renoise,in_warmup,in_memory,in_seed,in_noise,in_spot_size,in_blend,in_blend_alpha,in_save,in_blend_map, in_seed],
             )
     with gr.Accordion(label="Documentation", open=True):

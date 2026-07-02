@@ -7,7 +7,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from Nifty.method import *
-import Nifty.method as _nifty_method
 from Nifty.networks import *
 import warnings; warnings.filterwarnings('ignore')
 import gradio as gr
@@ -19,7 +18,7 @@ torch.manual_seed(seed)
 # Check for existing model at startup to handle UI button state
 MODEL_PATH = "./training/UNet_peppers.pth"
 has_initial_model = os.path.exists(MODEL_PATH)
-device_used = None
+device = manually_select_device(True)
 # Training settings
 training_path = ''
 training_img = None
@@ -31,16 +30,16 @@ def train_unet(img_path, save_path, progress=gr.Progress(track_tqdm=True)):
 		raise gr.Error("Please provide a valid save path.")
 	
 	# Load new training image and update mu/sigma
-	img = Tensor_load(img_path)
+	img = Tensor_load(img_path,device=device)
 	mu, sigma = img.mean(), img.std()
 	
 	# Train the flow model
 	flow_model = UNet(
 			dim=64,
-			dim_mults=(1, 2)).to(device_used)
+			dim_mults=(1, 2)).to(device)
  
 	progress(0, desc="Starting training loop")
-	train_flow_net((img-mu)/sigma, flow_model, load=False, epochs=10000, show=False, save_name=save_path, device=device_used)
+	train_flow_net((img-mu)/sigma, flow_model, load=False, epochs=10000, show=False, save_name=save_path, device=device)
 	progress(1.0, desc="Training complete")
 
 	# Re-enable the Generate button once trained
@@ -56,38 +55,38 @@ def load_unet(file_obj):
 	flow_model = UNet(
 			dim=64,
 			dim_mults=(1, 2)
-   ).to(device_used)
+   ).to(device)
 
-	flow_model.load_state_dict(torch.load(file_obj.name, map_location=device_used))
-	flow_model.eval().to(device_used)
+	flow_model.load_state_dict(torch.load(file_obj.name, map_location=device))
+	flow_model.eval().to(device)
 	
 	# Re-enable the Generate button once loaded
 	return gr.update(interactive=True)
 
 # Parameters
 def fresh_noise():
-	return torch.randn(1, 3, 256, 256).to(device_used)
+	return torch.randn(1, 3, 256, 256).to(device)
 
 # NN flow
 def flow_nn(image_path, T):
-	if "cuda" in str(_nifty_method.device):
+	if "cuda" in str(device):
 		torch.cuda.empty_cache()
 		print("cleared cache")
 	start = time.time()
 	torch.manual_seed(seed)
-	img = Tensor_load(image_path).clone().to(device_used)
+	img = Tensor_load(image_path,device=device).clone()
 	mu, sigma = img.mean(), img.std()
 	if flow_model is None:
 		raise gr.Error("No Neural Network loaded")
 	
-	flow_model.to(device_used)
-	noise = fresh_noise().to(device_used)
+	flow_model.to(device)
+	noise = fresh_noise().to(device)
 	with torch.no_grad():
 		x = noise*1.
-		times=torch.linspace(0, 1, steps=T+1).to(device_used)
+		times=torch.linspace(0, 1, steps=T+1).to(device)
 		for it in range(T):
-			t=times[it].unsqueeze(0).to(device_used)
-			flow = flow_model(x,t.view(1)).to(device_used)
+			t=times[it].unsqueeze(0).to(device)
+			flow = flow_model(x,t.view(1)).to(device)
 			x=x+flow*(times[it+1]-times[it])
 
 			synth_nn_x= x*sigma+mu
@@ -96,18 +95,17 @@ def flow_nn(image_path, T):
 	synth_nn = x*sigma+mu
 	synth_nn=synth_nn[...,64:64+128,64:64+128]
 	print(time.time()-start)
-	print(device_used)
 	yield get_synthesized_image(synth_nn)
 
 def flow_nifty(input_img_path, T, k, rs=1, octaves=1, renoise=0.5):
-	if "cuda" in str(_nifty_method.device):
+	if "cuda" in str(device):
 		torch.cuda.empty_cache()
 		print("cleared cache")
 	start = time.time()
 	if input_img_path is None:
 		raise gr.Error("No input image loaded")
 	torch.manual_seed(seed)
-	im1 = Tensor_load(input_img_path).clone().to(device_used)
+	im1 = Tensor_load(input_img_path,device=device).clone()
 	
 	noise = fresh_noise()
 	img= get_synthesized_image(Nifty(im1,rs=rs,T=T,k=k,patchsize=16,stride=4,octaves=octaves,size=(128,128),renoise_time=renoise,warmup=0,memory=False,noise=noise,show=False,spotsize=1/4,seed=seed,blend=0.,blend_alpha=0.5,blend_map=None))
@@ -142,22 +140,21 @@ def update_training_img(img):
 	training_img = img
 	
 def update_processing_unit_selection(choice:str):
-	global device_used
-	_nifty_method.device = manually_select_device(try_gpu=(choice == "GPU"))
-	device_used = _nifty_method.device
+	global device
+	device = manually_select_device(try_gpu=(choice == "GPU"))
+
 	try : 
-		flow_model = flow_model.to(device_used)
+		flow_model = flow_model.to(device)
 	except :
 		print("no flow model loaded")
  
-selected_processing_unit_type = "GPU" if "cuda" in str(_nifty_method.device) else "CPU"
-device_used = _nifty_method.device
+selected_processing_unit_type = "GPU" if "cuda" in str(device) else "CPU"
 
 # Initialize conditionally so it doesn't freeze the UI waiting to train if missing
 if has_initial_model:
-	flow_model = UNet(dim=64, dim_mults=(1, 2)).to(device_used)
-	flow_model.load_state_dict(torch.load(MODEL_PATH, map_location=device_used))
-	flow_model.eval().to(device_used)
+	flow_model = UNet(dim=64, dim_mults=(1, 2)).to(device)
+	flow_model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+	flow_model.eval().to(device)
 else:
 	flow_model = None
  
