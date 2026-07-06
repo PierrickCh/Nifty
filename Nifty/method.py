@@ -18,11 +18,8 @@ def manually_select_device(try_gpu=True):
     else:
         return torch.device('cpu')
 
-device = manually_select_device()
 
-
-
-def Tensor_load(file_name):
+def Tensor_load(file_name, device="cuda:0"):
     img = Image.open(file_name).convert('RGB')  # Ensure 3 channels (no alpha)
     img = torch.from_numpy(np.array(img)).float() / 255.0  # Normalize to [0, 1]
     img = img.permute(2, 0, 1).unsqueeze(0).to(device)  # (1, C, H, W)
@@ -89,7 +86,7 @@ def Patch_extraction(img, patchsize, stride) :
     P = torch.nn.Unfold(kernel_size=patchsize, dilation=1, padding=0, stride=stride)(img) # Tensor with dimension 1 x 3*Patchsize^2 x Heigh*Width/stride^2
     return P.to(torch.float32)
 
-def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4) : 
+def Patch_Average(P_synth, patchsize, stride, W, H, D, spotsize=1/4, device="cuda:0") : 
     # Gaussian weight for patch center
 
     w=torch.exp(-torch.linspace(-patchsize//2,patchsize//2,steps=patchsize).pow(2)/2/(patchsize*spotsize)**2).to(device)
@@ -127,7 +124,7 @@ def make_times(n_timestep , schedule='linear', t0=0,linear_start=1e-4, linear_en
     return times
 
 
-def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
+def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None, device="cuda:0") :
     N = P_exmpl.size(2)
     
     ## random subsampling
@@ -194,7 +191,7 @@ def Patch_topk(P_exmpl, P_synth, N_subsampling, k=10,mem=None) :
         
     return top, dists, mem
 
-def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise_time=.9,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None):
+def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),octaves=1,renoise_time=.9,warmup=0,show=True,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None, device="cuda:0"):
     if seed is not None:
         torch.manual_seed(seed)
 
@@ -257,7 +254,7 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             P_synth = Patch_extraction(synth, patchsize, stride)
             mean_ref = P_exmpl.mean(dim=-1,keepdim=True)
             P_flow=mean_ref-P_synth # flow first step, avoid 0 division, go towards mean patch
-            flow = Patch_Average(P_flow, patchsize, stride,  synth.shape[-2], synth.shape[-1], 0,spotsize=spotsize)
+            flow = Patch_Average(P_flow, patchsize, stride,  synth.shape[-2], synth.shape[-1], 0,spotsize=spotsize, device=device)
             synth+=flow*times[0]
         
 
@@ -266,7 +263,7 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
             P_synth = Patch_extraction(synth, patchsize, stride)
 
             for _ in range(warmup):
-                P_topk, D ,mem = Patch_topk(P_exmpl*t0, P_synth, N_subsampling,k=k,mem=mem)
+                P_topk, D ,mem = Patch_topk(P_exmpl*t0, P_synth, N_subsampling,k=k,mem=mem, device=device)
 
 
         for it in range(times.shape[0]-1): # ODE steps
@@ -279,13 +276,13 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
                 mem2=None
 
 
-            P_topk, D ,mem = Patch_topk(P_exmpl*t, P_synth, N_subsampling,k=k,mem=mem)
+            P_topk, D ,mem = Patch_topk(P_exmpl*t, P_synth, N_subsampling,k=k,mem=mem, device=device)
             P_topk=P_topk/t # renorm
             weight=nn.Softmax(dim=1)(-D/2/(1-t)**2) # flow weights
             P_flow=((P_topk-P_synth.unsqueeze(-1))*weight.unsqueeze(0).unsqueeze(0)).sum(-1)/(1-t) # \hat{\omega}} in the paper
 
             if im2 is not None and blend:
-                P_topk2, D ,mem2 = Patch_topk(P_exmpl2*t, P_synth, N_subsampling,k=k,mem=mem2)
+                P_topk2, D ,mem2 = Patch_topk(P_exmpl2*t, P_synth, N_subsampling,k=k,mem=mem2, device=device)
                 P_topk2=P_topk2/t
                 weight2=nn.Softmax(dim=1)(-D/2/(1-t)**2)
                 P_flow2=((P_topk2-P_synth.unsqueeze(-1))*weight2.unsqueeze(0).unsqueeze(0)).sum(-1)/(1-t)
@@ -298,7 +295,7 @@ def Nifty(img,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=1,size=(256,256),oct
 
 
             P_synth += P_flow*(times[it+1]-t) # ODE steps and aggregation of flows
-            synth = Patch_Average(P_synth, patchsize, stride,  synth.shape[-2], synth.shape[-1], D[:,0],spotsize=spotsize) 
+            synth = Patch_Average(P_synth, patchsize, stride,  synth.shape[-2], synth.shape[-1], D[:,0],spotsize=spotsize, device=device) 
         
         if save:
             imsave('./results/gt_s%d.png'%s,img_resized*sigma+mu)
