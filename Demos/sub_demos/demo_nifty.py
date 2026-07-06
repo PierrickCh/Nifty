@@ -255,7 +255,7 @@ def demo_nifty():
     chosen_limitation = limitation_server if runs_on_server else limitation_personal
 
     selected_processing_unit_type = "GPU" if torch.cuda.is_available() and runs_on_server == False else "CPU"
-    device = manually_select_device(try_gpu=False)
+    device = manually_select_device(try_gpu=(selected_processing_unit_type == "GPU"))
 
     # CPU or GPU selection
     with gr.Blocks():
@@ -465,28 +465,31 @@ def demo_nifty():
         
         
         in_octaves.change(
-            fn = lambda o, ps, w,h : 
+            fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = min(w,h)/(2 ** (o-1)), 
-                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+                    maximum = int(min(w, h) / (2 ** (o - 1))), 
+                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,
             show_progress=False
         )
         in_height.change(
-            fn = lambda o, ps, w,h : 
+            fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = min(w,h)/(2 ** (o-1)), 
-                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+                    maximum = int(min(w, h) / (2 ** (o - 1))), 
+                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,
             show_progress=False
         )
         in_width.change(
-            fn = lambda o, ps, w,h : 
+            fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = min(w,h)/(2 ** (o-1)), 
-                    value = min(ps,min(w,h)/(2 ** (o-1)))),
+                    maximum = int(min(w, h) / (2 ** (o - 1))), 
+                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,
             show_progress=False

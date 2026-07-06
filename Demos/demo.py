@@ -8,8 +8,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # UI Imports
 import gradio as gr
 from Demos.Utilities.theme import *
+
+
+import Demos.sub_demos.demo_nifty as dnfty
 from Demos.sub_demos.demo_nifty import demo_nifty
 from Demos.sub_demos.demo_unet import demo_unet
+
+dnfty.runs_on_server = False
 
 with gr.Blocks() as demo:
     gr.HTML(HTML_LOGO_HEADER)
