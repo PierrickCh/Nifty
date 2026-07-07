@@ -1,5 +1,6 @@
 import torch
 
+
 device= torch.device("cpu") # or "xpu" for XPU
 def foo(x, y):
     a = torch.sin(x)
