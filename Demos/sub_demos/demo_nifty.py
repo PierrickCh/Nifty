@@ -44,11 +44,24 @@ limitation_personal = {
     "k_max" : 50,
 }
 
+chosen_limitation = limitation_server if runs_on_server else limitation_personal
+
+#Helper function to safely unpack Gradio image dictionary vs string filepath (when uploading an image, it's not returning a path apparently)
+def get_file_path(img_input):
+    if isinstance(img_input, dict):
+        return img_input.get("background") or img_input.get("composite")
+    return img_input
+
 # Functions
 def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,stride=4,width=256,height=256,octaves=4,renoise=.9,warmup=0,memory=True,seed=None,noise=None,spotsize=1/4,blend=False,blend_alpha=0.5,save=True,blend_map=None, manual_noise_seed:int=0):
     global force_stop_loop
     force_stop_loop = False
     torch.manual_seed(manual_noise_seed)
+    
+    # Extract string paths safely
+    im1 = get_file_path(im1)
+    im2 = get_file_path(im2)
+    
     img_1 = Tensor_load(im1, device=device)
     img_2 = Tensor_load(im2, device=device) if im2 is not None else None
     size = (height, width)
@@ -60,7 +73,7 @@ def Nifty_gradio_interface_complete(im1,im2=None,rs=1.,T=100,k=10,patchsize=16,s
             return gr.update(value=None), gr.update(value=None) # Update both to None
 
         if save:
-            out_path = save_img_to_path(f"./results/demo/synth_{os.path.basename(im1)}_{round(time.time())}.png", synth)
+            out_path = save_img_to_path(f"./results/demo/synth_{os.path.basename(im1)}_{round(time.time())}.jpg", synth)
 
         img_synth = get_synthesized_image(synth)
 
@@ -173,10 +186,11 @@ def update_processing_unit_selection(choice: str):
 
 
 def resize_input_image(image_path: str, width: int, height: int) -> str:
+    image_path = get_file_path(image_path)
     img = Image.open(image_path)
     img_resized = img.resize((width, height))
     os.makedirs(temp_folder, exist_ok=True)
-    resized_image_path = f"{temp_folder}{os.path.basename(image_path)}_resized.png"
+    resized_image_path = f"{temp_folder}{os.path.basename(image_path)}_resized.jpg"
     img_resized.save(resized_image_path)
     return resized_image_path
 
@@ -188,10 +202,11 @@ def update_output_display_mode(debug_mode_enabled: bool):
 
 
 def update_compression_maximums_and_values(in_img,in_width,in_height):
+    in_img = get_file_path(in_img)
     if in_img is not None : 
         img = Image.open(in_img)
         w,h = img.size
-        return gr.update(value=min(w,1024), interactive=True), gr.update(value=min(h,1024), interactive=True)
+        return gr.update(value=min(w,chosen_limitation["resize_w_max"]), interactive=True), gr.update(value=min(h,chosen_limitation["resize_h_max"]), interactive=True)
     else :
         return gr.update(interactive=False), gr.update(interactive=False)
 
@@ -252,7 +267,7 @@ examples = [
 def demo_nifty():
     global device
     
-    chosen_limitation = limitation_server if runs_on_server else limitation_personal
+    # Removed local definition of chosen_limitation to use global scope setup instead
 
     selected_processing_unit_type = "GPU" if torch.cuda.is_available() and runs_on_server == False else "CPU"
     device = manually_select_device(try_gpu=(selected_processing_unit_type == "GPU"))
@@ -467,8 +482,8 @@ def demo_nifty():
         in_octaves.change(
             fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = int(min(w, h) / (2 ** (o - 1))), 
-                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                    maximum = max(2, int(min(w, h) / (2 ** (o - 1)))), 
+                    value = max(2.,min(int(min(w, h) / (2 ** (o - 1))), int(min(ps, min(w, h) / (2 ** (o - 1))))))
                 ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,
@@ -477,8 +492,8 @@ def demo_nifty():
         in_height.change(
             fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = int(min(w, h) / (2 ** (o - 1))), 
-                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                    maximum = max(2, int(min(w, h) / (2 ** (o - 1)))), 
+                    value = max(2.,min(int(min(w, h) / (2 ** (o - 1))), int(min(ps, min(w, h) / (2 ** (o - 1))))))
                 ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,
@@ -487,8 +502,8 @@ def demo_nifty():
         in_width.change(
             fn = lambda o, ps, w, h: 
                 gr.update(
-                    maximum = int(min(w, h) / (2 ** (o - 1))), 
-                    value = int(min(ps, min(w, h) / (2 ** (o - 1))))
+                    maximum = max(2, int(min(w, h) / (2 ** (o - 1)))), 
+                    value = max(2.,min(int(min(w, h) / (2 ** (o - 1))), int(min(ps, min(w, h) / (2 ** (o - 1))))))
                 ),
             inputs= [in_octaves, in_patch_size, in_width, in_height],
             outputs= in_patch_size,

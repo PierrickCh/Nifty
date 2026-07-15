@@ -93,7 +93,7 @@ HTML_HEADER = """
 
 HTML_AUTHORS = """
     <div style="text-align: center; padding: 0px;">
-        <p id="authors">Pierrick Chatillon, Julien Rabin, David Tschumperlé</p>
+        <p id="authors">Pierrick Chatillon, Julien Rabin, David Tschumperlé, Mahé Duval</p>
     </div>
 """
 
